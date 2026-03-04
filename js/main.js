@@ -159,92 +159,70 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 /* ========================================
-   BIOPRINTING NEWS FEED (Direct RSS via allorigins.win)
+   BIOPRINTING RESEARCH FEED (PubMed E-utilities API — no proxy needed)
    ======================================== */
 (function() {
-  var feeds = [
-    'https://www.sciencedaily.com/rss/health_medicine/biotechnology.xml',
-    'https://phys.org/rss-feed/biology-news/biotechnology/',
-    'https://pubmed.ncbi.nlm.nih.gov/rss/search/?term=bioprinting&limit=8',
-    'https://www.eurekalert.org/rss/technology_engineering.xml'
-  ];
-  var proxy = 'https://api.allorigins.win/get?url=';
-  var allArticles = [];
-  var feedsLoaded = 0;
+  var eutils = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/';
+  var query = 'bioprinting+tissue+engineering';
   var rendered = false;
 
-  function getNodeText(item, tag) {
-    var nodes = item.getElementsByTagName(tag);
-    return nodes.length ? nodes[0].textContent.trim() : '';
-  }
-
-  function renderNews() {
+  function renderNews(articles) {
     if (rendered) return;
     rendered = true;
     var container = document.getElementById('news-feed');
     if (!container) return;
-    var seen = {};
-    var sorted = allArticles.filter(function(a) {
-      if (seen[a.link]) return false;
-      seen[a.link] = true;
-      return true;
-    }).sort(function(a, b) {
-      return new Date(b.pubDate) - new Date(a.pubDate);
-    }).slice(0, 3);
-    if (sorted.length === 0) {
-      container.innerHTML = '<div class="news-error"><p>Unable to load news at this time. <a href="https://www.sciencedaily.com/news/health_medicine/biotechnology/" target="_blank" rel="noopener">Browse ScienceDaily</a></p></div>';
+    if (!articles || !articles.length) {
+      container.innerHTML = '<div class="news-error"><p>Unable to load research at this time. <a href="https://pubmed.ncbi.nlm.nih.gov/?term=bioprinting" target="_blank" rel="noopener">Browse PubMed</a></p></div>';
       return;
     }
-    container.innerHTML = '<div class="news-grid">' + sorted.map(function(article) {
-      var desc = article.description ? article.description.replace(/<[^>]+>/g, '').substring(0, 120) + '…' : '';
-      var date = article.pubDate ? new Date(article.pubDate).toLocaleDateString('en-US', {year:'numeric',month:'short',day:'numeric'}) : '';
+    container.innerHTML = '<div class="news-grid">' + articles.slice(0, 3).map(function(a) {
+      var authors = a.authors && a.authors.length
+        ? a.authors.slice(0, 2).map(function(x) { return x.name; }).join(', ') + (a.authors.length > 2 ? ' et al.' : '')
+        : '';
+      var desc = (authors ? authors + '. ' : '') + (a.source ? a.source + '.' : '');
       return '<div class="news-card">' +
         '<div class="news-card-image"><span class="news-placeholder">&#129516;</span></div>' +
         '<div class="news-card-body">' +
-          '<div class="news-card-source">' + (article.source || 'Bioprinting News') + '</div>' +
-          '<h3>' + article.title + '</h3>' +
+          '<div class="news-card-source">PubMed' + (a.source ? ' — ' + a.source : '') + '</div>' +
+          '<h3>' + a.title + '</h3>' +
           (desc ? '<p>' + desc + '</p>' : '') +
-          '<div class="news-card-date">' + date + '</div>' +
-          '<a href="' + article.link + '" target="_blank" rel="noopener noreferrer">Read More →</a>' +
+          '<div class="news-card-date">' + (a.pubdate || '') + '</div>' +
+          '<a href="https://pubmed.ncbi.nlm.nih.gov/' + a.uid + '/" target="_blank" rel="noopener noreferrer">Read Article →</a>' +
         '</div></div>';
     }).join('') + '</div>';
   }
 
-  var globalTimeout = setTimeout(renderNews, 12000);
+  var timeout = setTimeout(function() { renderNews([]); }, 12000);
 
-  feeds.forEach(function(feedUrl, idx) {
-    var sources = ['ScienceDaily','Phys.org','PubMed','EurekAlert'];
-    fetch(proxy + encodeURIComponent(feedUrl))
-      .then(function(r) { return r.json(); })
-      .then(function(data) {
-        var xml = data.contents;
-        if (!xml) throw new Error('no contents');
-        var parser = new DOMParser();
-        var doc = parser.parseFromString(xml, 'text/xml');
-        var items = doc.getElementsByTagName('item');
-        for (var i = 0; i < items.length; i++) {
-          var item = items[i];
-          var title = getNodeText(item, 'title');
-          var link = getNodeText(item, 'link') || getNodeText(item, 'guid');
-          var pubDate = getNodeText(item, 'pubDate');
-          var description = getNodeText(item, 'description');
-          if (title && link) {
-            allArticles.push({ title: title, link: link, pubDate: pubDate, description: description, source: sources[idx] || 'Bioprinting News' });
-          }
+  fetch(eutils + 'esearch.fcgi?db=pubmed&term=' + query + '&retmax=6&retmode=json&sort=date')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      var ids = data.esearchresult && data.esearchresult.idlist;
+      if (!ids || !ids.length) throw new Error('no ids');
+      return fetch(eutils + 'esummary.fcgi?db=pubmed&id=' + ids.join(',') + '&retmode=json');
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      clearTimeout(timeout);
+      var articles = [];
+      var uids = (data.result && data.result.uids) || [];
+      uids.forEach(function(uid) {
+        var item = data.result[uid];
+        if (item && item.title) {
+          articles.push({ uid: uid, title: item.title.replace(/\.$/, ''), source: item.source || '', pubdate: item.pubdate || '', authors: item.authors || [] });
         }
-        feedsLoaded++;
-        if (feedsLoaded === feeds.length) { clearTimeout(globalTimeout); renderNews(); }
-      })
-      .catch(function() {
-        feedsLoaded++;
-        if (feedsLoaded === feeds.length) { clearTimeout(globalTimeout); renderNews(); }
       });
-  });
+      renderNews(articles);
+    })
+    .catch(function() {
+      clearTimeout(timeout);
+      renderNews([]);
+    });
 
   document.addEventListener('DOMContentLoaded', function() {
     var container = document.getElementById('news-feed');
     if (container && !container.innerHTML.trim()) {
-      container.innerHTML = '<p class="news-loading">Loading latest bioprinting news…</p>';
+      container.innerHTML = '<p class="news-loading">Loading latest bioprinting research…</p>';
     }
   });
 })();
