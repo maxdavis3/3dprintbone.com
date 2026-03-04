@@ -163,10 +163,10 @@ document.addEventListener('DOMContentLoaded', function() {
    ======================================== */
 (function() {
   var feeds = [
-    { url: 'https://www.labiotech.eu/tag/bioprinting/feed/', name: 'Labiotech' },
-    { url: 'https://3dprint.com/category/health-3d-printing/feed/', name: '3DPrint.com' },
-    { url: 'https://3dprintingindustry.com/feed/', name: '3D Printing Industry' },
-    { url: 'https://www.fiercebiotech.com/rss/xml', name: 'FierceBiotech' }
+    { url: 'https://news.google.com/rss/search?q=bioprinting&hl=en-US&gl=US&ceid=US:en', name: 'Google News' },
+    { url: 'https://news.google.com/rss/search?q=tissue+engineering+3d+printing&hl=en-US&gl=US&ceid=US:en', name: 'Google News' },
+    { url: 'https://news.google.com/rss/search?q=regenerative+medicine+bioprint&hl=en-US&gl=US&ceid=US:en', name: 'Google News' },
+    { url: 'https://news.google.com/rss/search?q=organ+bioprinting&hl=en-US&gl=US&ceid=US:en', name: 'Google News' }
   ];
   var rss2jsonBase = 'https://api.rss2json.com/v1/api.json?rss_url=';
   var allArticles = [];
